@@ -12,7 +12,7 @@ const DEFAULT_API_URL: &str = "http://127.0.0.1:10101";
 const MAX_CHARS_PER_REQUEST: usize = 150;
 
 #[derive(Parser, Debug)]
-#[command(name = "t2s_client")]
+#[command(name = "docspeaker-cli")]
 #[command(about = "AivisSpeech client for text-to-speech conversion")]
 struct Args {
     /// Input folder containing txt/md files
@@ -125,8 +125,8 @@ fn main() -> Result<()> {
     // Read and combine all text
     let mut all_text = String::new();
     for file in &files {
-        let content = fs::read_to_string(file)
-            .with_context(|| format!("Failed to read file: {:?}", file))?;
+        let content =
+            fs::read_to_string(file).with_context(|| format!("Failed to read file: {:?}", file))?;
         if !all_text.is_empty() {
             all_text.push_str("\n\n");
         }
@@ -139,10 +139,9 @@ fn main() -> Result<()> {
     println!();
 
     // Setup audio output
-    let (_stream, stream_handle) = OutputStream::try_default()
-        .context("Failed to get audio output device")?;
-    let sink = Sink::try_new(&stream_handle)
-        .context("Failed to create audio sink")?;
+    let (_stream, stream_handle) =
+        OutputStream::try_default().context("Failed to get audio output device")?;
+    let sink = Sink::try_new(&stream_handle).context("Failed to create audio sink")?;
 
     // Process each chunk and collect WAV data
     let client = reqwest::blocking::Client::new();
@@ -151,8 +150,18 @@ fn main() -> Result<()> {
 
     for (i, chunk) in chunks.iter().enumerate() {
         let preview: String = chunk.chars().take(30).collect();
-        let ellipsis = if chunk.chars().count() > 30 { "..." } else { "" };
-        println!("[{}/{}] Processing: {}{}", i + 1, chunks.len(), preview, ellipsis);
+        let ellipsis = if chunk.chars().count() > 30 {
+            "..."
+        } else {
+            ""
+        };
+        println!(
+            "[{}/{}] Processing: {}{}",
+            i + 1,
+            chunks.len(),
+            preview,
+            ellipsis
+        );
 
         // Step 1: Generate audio query
         let query = generate_audio_query(&client, &args.api_url, chunk, args.speaker, args.speed)?;
@@ -162,13 +171,13 @@ fn main() -> Result<()> {
 
         // Read WAV data to get samples
         let cursor = Cursor::new(&wav_data);
-        let reader = hound::WavReader::new(cursor)
-            .context("Failed to parse WAV data")?;
+        let reader = hound::WavReader::new(cursor).context("Failed to parse WAV data")?;
 
         let spec = reader.spec();
         sample_rate = spec.sample_rate;
 
-        let samples: Vec<i16> = reader.into_samples::<i16>()
+        let samples: Vec<i16> = reader
+            .into_samples::<i16>()
             .filter_map(|s| s.ok())
             .collect();
 
@@ -201,8 +210,8 @@ fn main() -> Result<()> {
         sample_format: SampleFormat::Int,
     };
 
-    let mut writer = WavWriter::create(&output, spec)
-        .context("Failed to create output WAV file")?;
+    let mut writer =
+        WavWriter::create(&output, spec).context("Failed to create output WAV file")?;
 
     for sample in all_samples {
         writer.write_sample(sample)?;
@@ -245,7 +254,7 @@ fn split_text_into_chunks(text: &str, max_chars: usize) -> Vec<String> {
         .lines()
         .map(|line| line.trim())
         .filter(|line| !line.is_empty())
-        .filter(|line| !line.starts_with('#'))  // Skip markdown headers
+        .filter(|line| !line.starts_with('#')) // Skip markdown headers
         .filter(|line| !line.starts_with("```")) // Skip code blocks
         .collect::<Vec<_>>()
         .join(" ");
@@ -259,7 +268,12 @@ fn split_text_into_chunks(text: &str, max_chars: usize) -> Vec<String> {
 
         // Check for sentence endings
         let is_sentence_end = matches!(c, '。' | '！' | '？' | '.' | '!' | '?')
-            && chars.peek().map_or(true, |&next| next == ' ' || next == '　' || next.is_ascii_whitespace() || !next.is_ascii_punctuation());
+            && chars.peek().map_or(true, |&next| {
+                next == ' '
+                    || next == '　'
+                    || next.is_ascii_whitespace()
+                    || !next.is_ascii_punctuation()
+            });
 
         if is_sentence_end || current_chunk.chars().count() >= max_chars {
             let trimmed = current_chunk.trim().to_string();
@@ -299,7 +313,8 @@ fn generate_audio_query(
     speaker: i64,
     speed: f32,
 ) -> Result<AudioQuery> {
-    let url = format!("{}/audio_query?text={}&speaker={}",
+    let url = format!(
+        "{}/audio_query?text={}&speaker={}",
         api_url,
         urlencoding::encode(text),
         speaker
@@ -317,7 +332,8 @@ fn generate_audio_query(
         anyhow::bail!("audio_query failed with status {}: {}", status, body);
     }
 
-    let mut query: AudioQuery = response.json()
+    let mut query: AudioQuery = response
+        .json()
         .context("Failed to parse audio_query response")?;
 
     query.speed_scale = speed;
@@ -346,9 +362,7 @@ fn synthesize_audio(
         anyhow::bail!("synthesis failed with status {}: {}", status, body);
     }
 
-    let wav_data = response.bytes()
-        .context("Failed to get WAV data")?
-        .to_vec();
+    let wav_data = response.bytes().context("Failed to get WAV data")?.to_vec();
 
     Ok(wav_data)
 }
@@ -356,12 +370,10 @@ fn synthesize_audio(
 fn list_speakers(client: &reqwest::blocking::Client, api_url: &str) -> Result<Vec<Speaker>> {
     let url = format!("{}/speakers", api_url);
 
-    let response = client
-        .get(&url)
-        .send()
-        .context("Failed to get speakers")?;
+    let response = client.get(&url).send().context("Failed to get speakers")?;
 
-    let speakers: Vec<Speaker> = response.json()
+    let speakers: Vec<Speaker> = response
+        .json()
         .context("Failed to parse speakers response")?;
 
     Ok(speakers)

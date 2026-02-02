@@ -1,4 +1,4 @@
-# t2s_client
+# docspeaker-cli
 
 A text-to-speech (TTS) client using the AivisSpeech API.
 Converts text files and Markdown files to speech and outputs them as WAV files.
@@ -30,32 +30,32 @@ cargo build --release
 ### Basic usage
 
 ```bash
-t2s_client -i <input file/folder> -o <output WAV file>
+docspeaker-cli -i <input file/folder> -o <output WAV file>
 ```
 
 ### Examples
 
 ```bash
 # Convert a single file
-t2s_client -i document.md -o output.wav
+docspeaker-cli -i document.md -o output.wav
 
 # Convert all txt/md files in a folder
-t2s_client -i ./documents/ -o combined.wav
+docspeaker-cli -i ./documents/ -o combined.wav
 
 # Specify a speaker
-t2s_client -i document.md -o output.wav -s 1995743776
+docspeaker-cli -i document.md -o output.wav -s 1995743776
 
 # Enable realtime playback during conversion
-t2s_client -i document.md -o output.wav -r
+docspeaker-cli -i document.md -o output.wav -r
 
 # Change speech speed (1.5x)
-t2s_client -i document.md -o output.wav --speed 1.5
+docspeaker-cli -i document.md -o output.wav --speed 1.5
 ```
 
 ### List available speakers
 
 ```bash
-t2s_client --list-speakers
+docspeaker-cli --list-speakers
 ```
 
 ## Options
