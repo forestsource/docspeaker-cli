@@ -9,6 +9,8 @@ use std::path::PathBuf;
 use walkdir::WalkDir;
 
 const DEFAULT_API_URL: &str = "http://127.0.0.1:10101";
+const DEFAULT_SPEAKER: i64 = 888753760;
+const DEFAULT_SPEED: f32 = 1.0;
 const MAX_CHARS_PER_REQUEST: usize = 150;
 
 #[derive(Parser, Debug)]
@@ -24,16 +26,16 @@ struct Args {
     output: Option<PathBuf>,
 
     /// Speaker ID (use /speakers endpoint to find available speakers)
-    #[arg(short, long, default_value = "888753760")]
-    speaker: i64,
+    #[arg(short, long)]
+    speaker: Option<i64>,
 
     /// AivisSpeech API URL
-    #[arg(long, default_value = DEFAULT_API_URL)]
-    api_url: String,
+    #[arg(long)]
+    api_url: Option<String>,
 
     /// Speed scale (1.0 = normal)
-    #[arg(long, default_value = "1.0")]
-    speed: f32,
+    #[arg(long)]
+    speed: Option<f32>,
 
     /// Enable realtime playback
     #[arg(short, long)]
@@ -42,6 +44,83 @@ struct Args {
     /// List available speakers and exit
     #[arg(long)]
     list_speakers: bool,
+}
+
+#[derive(Debug, Default, Deserialize)]
+struct Settings {
+    speaker: Option<i64>,
+    api_url: Option<String>,
+    speed: Option<f32>,
+    realtime: Option<bool>,
+}
+
+impl Settings {
+    fn merge(&mut self, other: Settings) {
+        if self.speaker.is_none() {
+            self.speaker = other.speaker;
+        }
+        if self.api_url.is_none() {
+            self.api_url = other.api_url;
+        }
+        if self.speed.is_none() {
+            self.speed = other.speed;
+        }
+        if self.realtime.is_none() {
+            self.realtime = other.realtime;
+        }
+    }
+}
+
+fn load_settings() -> Settings {
+    let mut settings = Settings::default();
+
+    // Load from $HOME/.config/docspeaker-cli/settings.json (lowest priority)
+    if let Some(home) = dirs::home_dir() {
+        let config_path = home.join(".config").join("docspeaker-cli").join("settings.json");
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            if let Ok(s) = serde_json::from_str::<Settings>(&content) {
+                settings.merge(s);
+            }
+        }
+    }
+
+    // Load from binary location (higher priority)
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let config_path = exe_dir.join("settings.json");
+            if let Ok(content) = fs::read_to_string(&config_path) {
+                if let Ok(s) = serde_json::from_str::<Settings>(&content) {
+                    settings.merge(s);
+                }
+            }
+        }
+    }
+
+    settings
+}
+
+struct Config {
+    speaker: i64,
+    api_url: String,
+    speed: f32,
+    realtime: bool,
+}
+
+impl Config {
+    fn from_args_and_settings(args: &Args, settings: Settings) -> Self {
+        Self {
+            speaker: args.speaker
+                .or(settings.speaker)
+                .unwrap_or(DEFAULT_SPEAKER),
+            api_url: args.api_url.clone()
+                .or(settings.api_url)
+                .unwrap_or_else(|| DEFAULT_API_URL.to_string()),
+            speed: args.speed
+                .or(settings.speed)
+                .unwrap_or(DEFAULT_SPEED),
+            realtime: args.realtime || settings.realtime.unwrap_or(false),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -81,11 +160,13 @@ struct Style {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    let settings = load_settings();
+    let config = Config::from_args_and_settings(&args, settings);
 
     // Handle --list-speakers
     if args.list_speakers {
         let client = reqwest::blocking::Client::new();
-        let speakers = list_speakers(&client, &args.api_url)?;
+        let speakers = list_speakers(&client, &config.api_url)?;
         println!("Available speakers:");
         println!("===================");
         for speaker in speakers {
@@ -105,8 +186,8 @@ fn main() -> Result<()> {
     println!("==================================");
     println!("Input folder: {:?}", input);
     println!("Output file: {:?}", output);
-    println!("Speaker ID: {}", args.speaker);
-    println!("API URL: {}", args.api_url);
+    println!("Speaker ID: {}", config.speaker);
+    println!("API URL: {}", config.api_url);
     println!();
 
     // Collect all txt and md files
@@ -164,10 +245,10 @@ fn main() -> Result<()> {
         );
 
         // Step 1: Generate audio query
-        let query = generate_audio_query(&client, &args.api_url, chunk, args.speaker, args.speed)?;
+        let query = generate_audio_query(&client, &config.api_url, chunk, config.speaker, config.speed)?;
 
         // Step 2: Synthesize audio
-        let wav_data = synthesize_audio(&client, &args.api_url, &query, args.speaker)?;
+        let wav_data = synthesize_audio(&client, &config.api_url, &query, config.speaker)?;
 
         // Read WAV data to get samples
         let cursor = Cursor::new(&wav_data);
@@ -184,7 +265,7 @@ fn main() -> Result<()> {
         all_samples.extend(&samples);
 
         // Play audio in realtime (if enabled)
-        if args.realtime {
+        if config.realtime {
             let cursor = Cursor::new(wav_data);
             if let Ok(source) = Decoder::new(cursor) {
                 sink.append(source);
@@ -193,7 +274,7 @@ fn main() -> Result<()> {
     }
 
     // Wait for playback to finish
-    if args.realtime {
+    if config.realtime {
         println!();
         println!("Playing audio... (waiting for completion)");
         sink.sleep_until_end();

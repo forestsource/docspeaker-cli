@@ -68,6 +68,26 @@ docspeaker-cli --list-speakers
 | `--api-url` | - | AivisSpeech API の URL | `http://127.0.0.1:10101` |
 | `--list-speakers` | - | 利用可能な話者一覧を表示 | - |
 
+## 設定ファイル
+
+`settings.json` ファイルでデフォルト値を設定できます。以下の場所が優先順位順にチェックされます：
+
+1. 実行ファイルと同じディレクトリ (`settings.json`)
+2. `$HOME/.config/docspeaker-cli/settings.json`
+
+コマンドライン引数は常に設定ファイルの値より優先されます。
+
+### settings.json の例
+
+```json
+{
+  "speaker": 1995743776,
+  "api_url": "http://127.0.0.1:10101",
+  "speed": 1.0,
+  "realtime": false
+}
+```
+
 ## ライセンス
 
 MIT
