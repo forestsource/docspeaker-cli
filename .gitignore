@@ -11,3 +11,12 @@ target
 .idea/
 .DS_Store
 .claude
+
+# Certificates (never commit these!)
+*.pfx
+*.cer
+*.p12
+
+# MSIX packages
+*.msix
+*.msixbundle
