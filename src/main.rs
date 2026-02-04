@@ -327,18 +327,57 @@ fn collect_text_files(dir: &PathBuf) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+fn remove_urls_and_links(text: &str) -> String {
+    let mut result = text.to_string();
+
+    // Remove markdown links [text](url) -> text
+    let link_re = regex::Regex::new(r"\[([^\]]*)\]\([^)]+\)").unwrap();
+    result = link_re.replace_all(&result, "$1").to_string();
+
+    // Remove standalone URLs (http:// or https://)
+    let url_re = regex::Regex::new(r"https?://[^\s]+").unwrap();
+    result = url_re.replace_all(&result, "").to_string();
+
+    // Clean up multiple spaces
+    let spaces_re = regex::Regex::new(r"\s+").unwrap();
+    result = spaces_re.replace_all(&result, " ").to_string();
+
+    result.trim().to_string()
+}
+
 fn split_text_into_chunks(text: &str, max_chars: usize) -> Vec<String> {
     let mut chunks = Vec::new();
 
-    // Clean the text
-    let text = text
-        .lines()
-        .map(|line| line.trim())
-        .filter(|line| !line.is_empty())
-        .filter(|line| !line.starts_with('#')) // Skip markdown headers
-        .filter(|line| !line.starts_with("```")) // Skip code blocks
-        .collect::<Vec<_>>()
-        .join(" ");
+    // Clean the text (handle markdown code blocks and URLs)
+    let mut in_code_block = false;
+    let mut filtered_lines = Vec::new();
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+
+        // Toggle code block state
+        if trimmed.starts_with("```") {
+            in_code_block = !in_code_block;
+            continue;
+        }
+
+        // Skip lines inside code blocks
+        if in_code_block {
+            continue;
+        }
+
+        // Skip empty lines and markdown headers
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        filtered_lines.push(trimmed.to_string());
+    }
+
+    let text = filtered_lines.join(" ");
+
+    // Remove URLs and markdown links
+    let text = remove_urls_and_links(&text);
 
     // Split by sentence-ending punctuation
     let mut current_chunk = String::new();
